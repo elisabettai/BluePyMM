@@ -106,6 +106,7 @@ def load_module(name, path):
     from https://docs.python.org/2/library/imp.html#examples
     """
     # Fast path: see if the module has already been imported.
+    sys.path.append(path)
     try:
         return sys.modules[name]
     except KeyError:

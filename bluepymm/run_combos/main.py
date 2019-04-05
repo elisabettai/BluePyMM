@@ -44,6 +44,7 @@ def add_parser(action):
 def run_combos_from_conf(conf_dict, ipyp=None, ipyp_profile=None):
     """Run combos from conf dictionary"""
     output_dir = conf_dict['output_dir']
+    save_traces = conf_dict['save_traces']
     final_dict = tools.load_json(
         os.path.join(
             output_dir,
@@ -60,7 +61,8 @@ def run_combos_from_conf(conf_dict, ipyp=None, ipyp_profile=None):
         emodel_dirs,
         scores_db_path,
         use_ipyp=ipyp,
-        ipyp_profile=ipyp_profile)
+        ipyp_profile=ipyp_profile,
+        save_traces=save_traces)
 
 
 def run_combos(conf_filename, ipyp=None, ipyp_profile=None):

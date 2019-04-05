@@ -30,8 +30,21 @@ import ipyparallel
 import sqlite3
 import traceback
 import pandas
-
 from bluepymm import tools
+
+from bluepyopt.ephys.responses import TimeVoltageResponse
+
+import logging
+#mpl_logger = logging.getLogger("matplotlib")
+#mpl_logger.setLevel(logging.WARNING) 
+
+
+class TimeVoltageResponseEncoder(json.JSONEncoder):
+    def default(self, obj):
+        if isinstance(obj, TimeVoltageResponse):
+            return obj.response.to_json()
+        # Let the base class default method raise the TypeError
+        return json.JSONEncoder.default(self, obj)
 
 
 def run_emodel_morph_isolated(input_args):
@@ -44,12 +57,11 @@ def run_emodel_morph_isolated(input_args):
         - emodel_dir: directory containing e-model files
         - emodel_params: dict that maps e-model parameters to their values
         - morph_path: path to morphology
-
     Returns:
         Dict with keys 'exception', 'extra_values', 'scores', 'uid'.
     """
 
-    uid, emodel, emodel_dir, emodel_params, morph_path = input_args
+    uid, emodel, emodel_dir, emodel_params, morph_path , save_traces= input_args
 
     return_dict = {}
     return_dict['uid'] = uid
@@ -59,7 +71,7 @@ def run_emodel_morph_isolated(input_args):
 
     try:
         return_dict['scores'], return_dict['extra_values'] = pool.apply(
-            run_emodel_morph, (emodel, emodel_dir, emodel_params, morph_path))
+            run_emodel_morph, (uid, emodel, emodel_dir, emodel_params, morph_path, save_traces))
     except Exception:
         return_dict['scores'] = None
         return_dict['extra_values'] = None
@@ -89,11 +101,15 @@ def read_apical_point(morph_dir, morph_name):
 
 
 def run_emodel_morph(
+        uid,
         emodel,
         emodel_dir,
         emodel_params,
         morph_path,
-        extra_values_error=True):
+        save_traces=False,
+        extra_values_error=True
+        ):
+
     """Run e-model morphology combination.
 
     Args:
@@ -101,6 +117,7 @@ def run_emodel_morph(
         emodel_dir: directory containing e-model files
         emodel_params: dict that maps e-model parameters to their values
         morph_path: path to morphology
+        save_traces: save e-model traces and features
 
     Returns:
         tuple:
@@ -138,6 +155,7 @@ def run_emodel_morph(
 
                 extra_values = {}
 
+                
                 for response_key, extra_values_key in [
                         ('%s.bpo_holding_current' % prefix,
                          'holding_current'),
@@ -164,19 +182,101 @@ def run_emodel_morph(
                     responses)
 
                 extra_values = {}
-                extra_values['holding_current'] = \
-                    responses.get('bpo_holding_current', None)
-                extra_values['threshold_current'] = \
-                    responses.get('bpo_threshold_current', None)
 
+                prefix = ''
+                # All thalamic e-models have hold/thres current hyp
+                for response_key, extra_values_key in [
+                   ('%s.bpo_holding_current_hyp' % prefix,
+                         'holding_current'),
+                        ('%s.bpo_threshold_current_hyp' % prefix,
+                         'threshold_current')]:
+                    if response_key in responses:
+                        extra_values[extra_values_key] = responses[
+                            response_key]
+                    else:
+                        if extra_values_error:
+                            raise ValueError(
+                                "Key %s not found in responses: %s" %
+                                (response_key, str(responses)))
+                        else:
+                            extra_values[extra_values_key] = None
+
+                # Only some thalamic e-models have hold/thres current dep
+                for response_key, extra_values_key in [
+                   ('%s.bpo_holding_current_dep' % prefix,
+                         'holding_current_dep'),
+                        ('%s.bpo_threshold_current_dep' % prefix,
+                         'threshold_current_dep')]:
+                    if response_key in responses:
+                        extra_values[extra_values_key] = responses[
+                            response_key]
+                    else:
+                        extra_values[extra_values_key] = None
+            if save_traces:            
+                # Calculate and save features
+                feature_values = {}
+                for objective in evaluator.objectives: # It assumes that each objective corresponds to 1 feature.
+                    for feature in objective.features:
+                        feature_values[feature.name] = {
+                        'value': feature.calculate_feature(responses),
+                        'exp_mean': feature.exp_mean,
+                        'exp_std': feature.exp_std
+                    }
+                traces_fn = 'traces_{}_{}_{}.json'.format(
+                    uid, emodel, os.path.basename(morph_path))
+                traces_path = os.path.join(
+                    emodel_dir,
+                    '..',
+                    '..',
+                    '..',
+                    'output',
+                    'traces')
+                try:
+                    os.mkdir(traces_path)
+                except BaseException:
+                    pass
+            
+                traces_fn = os.path.join(traces_path, traces_fn)
+                with open(traces_fn, 'w') as traces_file:
+                    json.dump(
+                        responses,
+                        traces_file,
+                        indent=2,
+                        sort_keys=True,
+                        cls=TimeVoltageResponseEncoder)
+
+            
+                features_fn = 'features_{}_{}_{}.json'.format(
+                    uid, emodel, os.path.basename(morph_path))
+                features_path = os.path.join(
+                    emodel_dir,
+                    '..',
+                    '..',
+                    '..',
+                    'output',
+                    'features')
+                try:
+                    os.mkdir(features_path)
+                except BaseException:
+                    pass
+
+                features_fn = os.path.join(features_path, features_fn)
+                with open(features_fn, 'w') as features_file:
+                    json.dump(
+                        feature_values,
+                        features_file,
+                        indent=2,
+                        sort_keys=True)
+                
         return scores, extra_values
+
     except Exception:
         # Make sure exception and backtrace are thrown back to parent process
         raise Exception(
             "".join(traceback.format_exception(*sys.exc_info())))
 
 
-def create_arg_list(scores_db_filename, emodel_dirs, final_dict):
+def create_arg_list(scores_db_filename, emodel_dirs, final_dict, save_traces = False):
     """Create list of argument tuples to be used as an input for
     run_emodel_morph.
 
@@ -185,7 +285,7 @@ def create_arg_list(scores_db_filename, emodel_dirs, final_dict):
         emodel_dirs: a dict mapping e-models to the directories with e-model
             input files
         final_dict: a dict mapping e-models to dicts with e-model parameters
-
+        save_traces: save traces and features
     Raises:
         ValueError, if one of the database entries contains has value None for
         the key 'emodel'.
@@ -219,7 +319,7 @@ def create_arg_list(scores_db_filename, emodel_dirs, final_dict):
                 args = (index, emodel,
                         os.path.abspath(emodel_dirs[emodel]),
                         final_dict[original_emodel]['params'],
-                        morph_path)
+                        morph_path, save_traces)
                 arg_list.append(args)
 
     print('Found %d rows in score database to run' % len(arg_list))
@@ -289,7 +389,7 @@ def expand_scores_to_score_values_table(scores_sqlite_filename):
 
 
 def calculate_scores(final_dict, emodel_dirs, scores_db_filename,
-                     use_ipyp=False, ipyp_profile=None):
+                     use_ipyp=False, ipyp_profile=None, save_traces=False):
     """Calculate scores of e-model morphology combinations and update the
     database accordingly.
 
@@ -302,11 +402,11 @@ def calculate_scores(final_dict, emodel_dirs, scores_db_filename,
         use_ipyp: bool indicating whether ipyparallel is used. Default is
             False.
         ipyp_profile: path to ipyparallel profile. Default is None.
+        save_traces: save e-model traces and features
     """
 
     print('Creating argument list for parallelisation')
-    arg_list = create_arg_list(scores_db_filename, emodel_dirs, final_dict)
-
+    arg_list = create_arg_list(scores_db_filename, emodel_dirs, final_dict, save_traces)
     print('Parallelising score evaluation of %d me-combos' % len(arg_list))
 
     if use_ipyp:
