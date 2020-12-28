@@ -20,4 +20,4 @@ Copyright (c) 2018, EPFL/Blue Brain Project
 """
 
 
-from .main import select_combos, add_parser  # NOQA
+from .main import select_combos, add_parser, select_combos_dep, add_parser_dep  # NOQA

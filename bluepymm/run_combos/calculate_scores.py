@@ -107,7 +107,7 @@ def run_emodel_morph(
         emodel_params,
         morph_path,
         save_traces=False,
-        extra_values_error=True
+        extra_values_error=False
         ):
 
     """Run e-model morphology combination.
@@ -184,7 +184,7 @@ def run_emodel_morph(
                 extra_values = {}
 
                 prefix = ''
-                # All thalamic e-models have hold/thres current hyp
+                # All thalamic e-models have hyp hold/thresh currents
                 for response_key, extra_values_key in [
                    ('%s.bpo_holding_current_hyp' % prefix,
                          'holding_current'),
@@ -201,7 +201,7 @@ def run_emodel_morph(
                         else:
                             extra_values[extra_values_key] = None
 
-                # Only some thalamic e-models have hold/thres current dep
+                # Some thalamic e-models have hold/thres current dep
                 for response_key, extra_values_key in [
                    ('%s.bpo_holding_current_dep' % prefix,
                          'holding_current_dep'),

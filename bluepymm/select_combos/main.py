@@ -27,7 +27,7 @@ import os
 
 from bluepymm import tools
 
-from . import sqlite_io, reporting, megate_output
+from . import sqlite_io, reporting, megate_output, reporting_dep, megate_output_dep
 from . import process_megate_config as proc_config
 
 
@@ -38,8 +38,15 @@ def select_combos(conf_filename):
 
     select_combos_from_conf(conf_dict)
 
+def select_combos_dep(conf_filename):
+    """Parse conf file and run select combos"""
+    # Parse configuration file
+    conf_dict = tools.load_json(conf_filename)
 
-def select_combos_from_conf(conf_dict):
+    select_combos_from_conf(conf_dict, dep=True)
+
+
+def select_combos_from_conf(conf_dict, dep=False):
     """Compare scores of me-combinations to thresholds, select successful
     combinations, and write results out to file.
 
@@ -72,8 +79,24 @@ def select_combos_from_conf(conf_dict):
     tools.check_all_combos_have_run(scores, scores_db_filename)
 
     print('Start creation of ext_neurondb')
+
     # create final database and write report
-    ext_neurondb = \
+    if dep:
+        ext_neurondb = \
+        reporting_dep.create_final_db_and_write_report(
+            pdf_filename,
+            to_skip_features,
+            to_skip_patterns,
+            megate_thresholds,
+            megate_patterns,
+            conf_dict.get('skip_repaired_exemplar', False),
+            conf_dict.get('check_opt_scores', True),
+            scores, score_values,
+            conf_dict.get('plot_emodels_per_morphology', False),
+            output_dir,
+            select_perc_best)
+    else:
+        ext_neurondb = \
         reporting.create_final_db_and_write_report(
             pdf_filename,
             to_skip_features,
@@ -86,11 +109,22 @@ def select_combos_from_conf(conf_dict):
             conf_dict.get('plot_emodels_per_morphology', False),
             output_dir,
             select_perc_best)
+
     print('Wrote pdf to %s' % os.path.abspath(pdf_filename))
 
     # write output files
     compliant = conf_dict.get('make_names_neuron_compliant', False)
-    extneurondb_path, mecombo_emodel_path = \
+    
+    if dep:
+        extneurondb_path, mecombo_emodel_path = \
+        megate_output_dep.save_megate_results(
+            ext_neurondb,
+            output_dir,
+            sort_key='combo_name',
+            make_names_neuron_compliant=compliant)
+
+    else:
+        extneurondb_path, mecombo_emodel_path = \
         megate_output.save_megate_results(
             ext_neurondb,
             output_dir,
@@ -98,8 +132,15 @@ def select_combos_from_conf(conf_dict):
             make_names_neuron_compliant=compliant)
 
     emodels_hoc_path = conf_dict['emodels_hoc_dir']
+    if dep:
+        megate_output_dep.write_mecomboreleasejson(
+        output_dir,
+        emodels_hoc_path,
+        extneurondb_path,
+        mecombo_emodel_path)
 
-    megate_output.write_mecomboreleasejson(
+    else:
+        megate_output.write_mecomboreleasejson(
         output_dir,
         emodels_hoc_path,
         extneurondb_path,
@@ -111,4 +152,11 @@ def add_parser(action):
 
     parser = action.add_parser('select',
                                help='Select feasible me-combinations')
+    parser.add_argument('conf_filename')
+
+def add_parser_dep(action):
+    """Add parser"""
+
+    parser = action.add_parser('select_dep',
+                               help='Select feasible me-combinations, save holding/threshold currents in depolarized state')
     parser.add_argument('conf_filename')
