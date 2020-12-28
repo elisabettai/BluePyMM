@@ -1,6 +1,55 @@
-[![Build Status](https://travis-ci.org/BlueBrain/BluePyMM.svg?branch=master)](https://travis-ci.org/BlueBrain/BluePyMM)
-[![codecov](https://codecov.io/gh/BlueBrain/BluePyMM/branch/master/graph/badge.svg?token=G2d5ZWJbyY)](https://codecov.io/gh/BlueBrain/BluePyMM)
-[![Documentation Status](https://readthedocs.org/projects/bluepymm/badge/?version=latest)](http://bluepymm.readthedocs.io/en/latest/?badge=latest)
+<img src="docs/source/logo/BluePyMMBanner.png"/>
+
+<table>
+<tr>
+  <td>Latest Release</td>
+  <td>
+    <a href="https://pypi.org/project/bluepymm/">
+    <img src="https://img.shields.io/pypi/v/bluepymm.svg" alt="latest release" />
+    </a>
+  </td>
+</tr>
+<tr>
+  <td>Documentation</td>
+  <td>
+    <a href="https://bluepymm.readthedocs.io/en/latest/">
+    <img src="https://readthedocs.org/projects/bluepymm/badge/?version=latest" alt="latest documentation" />
+    </a>
+  </td>
+</tr>
+<tr>
+  <td>License</td>
+  <td>
+    <a href="https://github.com/BlueBrain/bluepymm/blob/master/LICENSE.txt">
+    <img src="https://img.shields.io/pypi/l/bluepymm.svg" alt="license" />
+    </a>
+</td>
+</tr>
+<tr>
+  <td>Build Status</td>
+  <td>  
+    <a href="https://github.com/BlueBrain/BluePyMM/actions">
+    <img src="https://github.com/BlueBrain/BluePyMM/workflows/Build/badge.svg?branch=master" alt="Actions build status" />
+    </a>
+  </td>
+</tr>
+<tr>
+  <td>Coverage</td>
+  <td>
+    <a href="https://codecov.io/gh/BlueBrain/bluepymm">
+    <img src="https://codecov.io/github/BlueBrain/BluePyMM/coverage.svg?branch=master" alt="coverage" />
+    </a>
+  </td>
+</tr>
+<tr>
+	<td>Gitter</td>
+	<td>
+		<a href="https://gitter.im/bluebrain/bluepymm">
+		<img src="https://badges.gitter.im/Join%20Chat.svg"
+	</a>
+	</td>
+</tr>
+</table>
 
 Introduction
 ============
@@ -62,5 +111,5 @@ dependencies. See file LGPL.txt for the full license.
 
 Funding
 =======
-This work has been partially funded by the European Union Seventh Framework Programme (FP7/2007-2013) under grant agreement No. 604102 (HBP) and by the European Union’s Horizon 2020 Framework Programme for Research and Innovation under Grant Agreement No. 720270 (Human Brain Project SGA1).
+This work has been partially funded by the European Union Seventh Framework Program (FP7/2007­2013) under grant agreement no. 604102 (HBP), the European Union’s Horizon 2020 Framework Programme for Research and Innovation under the Specific Grant Agreement No. 720270, 785907 (Human Brain Project SGA1/SGA2) and by the EBRAINS research infrastructure, funded from the European Union’s Horizon 2020 Framework Programme for Research and Innovation under the Specific Grant Agreement No. 945539 (Human Brain Project SGA3).
 

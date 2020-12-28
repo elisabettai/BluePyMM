@@ -57,11 +57,24 @@ def run_emodel_morph_isolated(input_args):
         - emodel_dir: directory containing e-model files
         - emodel_params: dict that maps e-model parameters to their values
         - morph_path: path to morphology
+        - apical_point_isec: integer value of the apical point isection
+        - extra_values_error: boolean to raise an exception upon a missing key
+
     Returns:
         Dict with keys 'exception', 'extra_values', 'scores', 'uid'.
     """
 
-    uid, emodel, emodel_dir, emodel_params, morph_path , save_traces= input_args
+
+    #uid, emodel, emodel_dir, emodel_params, morph_path , save_traces= input_args
+    (
+        uid,
+        emodel,
+        emodel_dir,
+        emodel_params,
+        morph_path,
+        apical_point_isec,
+        extra_values_error
+    ) = input_args
 
     return_dict = {}
     return_dict['uid'] = uid
@@ -71,7 +84,14 @@ def run_emodel_morph_isolated(input_args):
 
     try:
         return_dict['scores'], return_dict['extra_values'] = pool.apply(
-            run_emodel_morph, (uid, emodel, emodel_dir, emodel_params, morph_path, save_traces))
+            run_emodel_morph, (emodel,
+                               emodel_dir,
+                               emodel_params,
+                               morph_path,
+                               apical_point_isec,
+                               extra_values_error
+                               ))
+
     except Exception:
         return_dict['scores'] = None
         return_dict['extra_values'] = None
@@ -107,8 +127,8 @@ def run_emodel_morph(
         emodel_params,
         morph_path,
         save_traces=False,
-        extra_values_error=False
-        ):
+        apical_point_isec,
+        extra_values_error=True):
 
     """Run e-model morphology combination.
 
@@ -118,6 +138,9 @@ def run_emodel_morph(
         emodel_params: dict that maps e-model parameters to their values
         morph_path: path to morphology
         save_traces: save e-model traces and features
+        apical_point_isec: integer value of the apical point isection
+        extra_values_error: boolean to raise an exception upon a missing key
+
 
     Returns:
         tuple:
@@ -135,12 +158,8 @@ def run_emodel_morph(
         print("Changing path to %s" % emodel_dir)
         with tools.cd(emodel_dir):
             if hasattr(setup, 'multieval'):
-                apical_point_isec = read_apical_point(
-                    os.path.dirname(morph_path), os.path.splitext(
-                        os.path.basename(morph_path))[0])
 
                 prefix = 'mm'
-
                 altmorph = [[prefix, morph_path, apical_point_isec]]
                 evaluator = setup.evaluator.create(etype='%s' % emodel,
                                                    altmorph=altmorph)
@@ -276,7 +295,9 @@ def run_emodel_morph(
             "".join(traceback.format_exception(*sys.exc_info())))
 
 
-def create_arg_list(scores_db_filename, emodel_dirs, final_dict, save_traces = False):
+def create_arg_list(scores_db_filename, emodel_dirs, final_dict, save_trace = False,
+                    extra_values_error=False, use_apical_points=True):
+
     """Create list of argument tuples to be used as an input for
     run_emodel_morph.
 
@@ -286,16 +307,27 @@ def create_arg_list(scores_db_filename, emodel_dirs, final_dict, save_traces = F
             input files
         final_dict: a dict mapping e-models to dicts with e-model parameters
         save_traces: save traces and features
+        extra_values_error: boolean to raise an exception upon a missing key
+        use_apical_points: boolean to use apical points or not
     Raises:
         ValueError, if one of the database entries contains has value None for
         the key 'emodel'.
     """
-    arg_list = []
 
+    arg_list = []
     with sqlite3.connect(scores_db_filename) as scores_db:
         scores_db.row_factory = sqlite3.Row
-        scores_cursor = scores_db.execute('SELECT * FROM scores')
 
+        one_row = scores_db.execute('SELECT * FROM scores LIMIT 1').fetchone()
+
+        apical_points_isec = {}
+        setup = tools.load_module('setup', emodel_dirs[one_row['emodel']])
+        if hasattr(setup, 'multieval') and use_apical_points:
+            apical_points_isec = tools.load_json(
+                os.path.join(one_row['morph_dir'], "apical_points_isec.json")
+            )
+
+        scores_cursor = scores_db.execute('SELECT * FROM scores')
         for row in scores_cursor.fetchall():
             index = row['index']
             morph_name = row['morph_name']
@@ -303,6 +335,10 @@ def create_arg_list(scores_db_filename, emodel_dirs, final_dict, save_traces = F
 
             if morph_ext is None:
                 morph_ext = '.asc'
+
+            apical_point_isec = None
+            if morph_name in apical_points_isec:
+                apical_point_isec = int(apical_points_isec[morph_name])
 
             morph_filename = morph_name + morph_ext
             morph_path = os.path.abspath(os.path.join(row['morph_dir'],
@@ -319,7 +355,7 @@ def create_arg_list(scores_db_filename, emodel_dirs, final_dict, save_traces = F
                 args = (index, emodel,
                         os.path.abspath(emodel_dirs[emodel]),
                         final_dict[original_emodel]['params'],
-                        morph_path, save_traces)
+                        morph_path, save_trace, apical_point_isec, extra_values_error)
                 arg_list.append(args)
 
     print('Found %d rows in score database to run' % len(arg_list))
@@ -389,7 +425,9 @@ def expand_scores_to_score_values_table(scores_sqlite_filename):
 
 
 def calculate_scores(final_dict, emodel_dirs, scores_db_filename,
-                     use_ipyp=False, ipyp_profile=None, save_traces=False):
+                     use_ipyp=False, ipyp_profile=None, save_traces=False, timeout=10
+                     use_apical_points=True, n_processes=None):
+
     """Calculate scores of e-model morphology combinations and update the
     database accordingly.
 
@@ -402,22 +440,30 @@ def calculate_scores(final_dict, emodel_dirs, scores_db_filename,
         use_ipyp: bool indicating whether ipyparallel is used. Default is
             False.
         ipyp_profile: path to ipyparallel profile. Default is None.
+
         save_traces: save e-model traces and features
+        use_apical_points: boolean to use apical points or not
+        n_processes: the integer number of processes. If `None`,
+        all processes are going to be used.
     """
 
     print('Creating argument list for parallelisation')
-    arg_list = create_arg_list(scores_db_filename, emodel_dirs, final_dict, save_traces)
-    print('Parallelising score evaluation of %d me-combos' % len(arg_list))
+    arg_list = create_arg_list(scores_db_filename,
+                               emodel_dirs,
+                               final_dict,
+                               save_traces,
+                               use_apical_points=use_apical_points)
 
+    print('Parallelising score evaluation of %d me-combos' % len(arg_list))
     if use_ipyp:
         # use ipyparallel
-        client = ipyparallel.Client(profile=ipyp_profile)
-        lview = client.load_balanced_view()
+        client = ipyparallel.Client(profile=ipyp_profile, timeout=timeout)
+        lview = client.load_balanced_view(targets=n_processes)
         results = lview.imap(run_emodel_morph_isolated,
                              arg_list, ordered=False)
     else:
         # use multiprocessing
-        pool = tools.NestedPool()
+        pool = tools.NestedPool(processes=n_processes)
         results = pool.imap_unordered(run_emodel_morph_isolated, arg_list)
 
     # keep track of the number of received results
@@ -437,6 +483,10 @@ def calculate_scores(final_dict, emodel_dirs, scores_db_filename,
               (uid, uids_received, len(arg_list),
                'with exception' if exception else ''))
         sys.stdout.flush()
+
+    if not use_ipyp:
+        pool.terminate()
+        pool.join()
 
     print('Converting score json strings to scores values ...')
     expand_scores_to_score_values_table(scores_db_filename)

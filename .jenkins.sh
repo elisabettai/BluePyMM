@@ -3,13 +3,17 @@
 set -e
 set -x
 
-tox_args='--recreate -e py27-style-unit-functional'
+tox_args='--recreate -e py3-style-unit-functional'
 
 if [ "${os}" = "cscsviz" ]
 then
 	. /opt/rh/python27/enable
-elif [ "${os}" = "Ubuntu-16.04" ]
+elif [ "${os}" = "Ubuntu-18.04" ]
 then
+	tox_args="${tox_args}"
+elif [ "${os}" = "bb5" ]
+then
+	. /opt/rh/rh-python36/enable
 	tox_args="${tox_args}"
 fi
 
@@ -28,7 +32,7 @@ fi
 
 . ${WORKSPACE}/env/bin/activate
 pip install pip --upgrade
-pip install tox==3.7
+pip install tox --upgrade
 
 #####
 # Tests

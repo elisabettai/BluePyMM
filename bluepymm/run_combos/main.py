@@ -39,9 +39,14 @@ def add_parser(action):
                         help='Use ipyparallel')
     parser.add_argument('--ipyp_profile',
                         help='Path to ipyparallel profile')
+    parser.add_argument('--timeout',
+                        help='Timeout for ipyparallel clients')
+    parser.add_argument('--n_processes', help='number of processes',
+                        type=int)
 
 
-def run_combos_from_conf(conf_dict, ipyp=None, ipyp_profile=None):
+def run_combos_from_conf(conf_dict, ipyp=None, ipyp_profile=None, timeout=10,
+                         n_processes=None):
     """Run combos from conf dictionary"""
     output_dir = conf_dict['output_dir']
     save_traces = conf_dict['save_traces']
@@ -55,6 +60,11 @@ def run_combos_from_conf(conf_dict, ipyp=None, ipyp_profile=None):
             'emodel_dirs.json'))
     scores_db_path = os.path.abspath(conf_dict['scores_db'])
 
+    if 'use_apical_points' in conf_dict:
+        use_apical_points = conf_dict['use_apical_points']
+    else:
+        use_apical_points = True
+
     print('Calculating scores')
     calculate_scores.calculate_scores(
         final_dict,
@@ -62,13 +72,17 @@ def run_combos_from_conf(conf_dict, ipyp=None, ipyp_profile=None):
         scores_db_path,
         use_ipyp=ipyp,
         ipyp_profile=ipyp_profile,
-        save_traces=save_traces)
+        save_traces=save_traces,
+        timeout=timeout,
+        use_apical_points=use_apical_points,
+        n_processes=n_processes)
 
 
-def run_combos(conf_filename, ipyp=None, ipyp_profile=None):
+def run_combos(conf_filename, ipyp=None, ipyp_profile=None, n_processes=None):
     """Run combos"""
 
     print('Reading configuration at %s' % conf_filename)
     conf_dict = tools.load_json(conf_filename)
 
-    run_combos_from_conf(conf_dict, ipyp, ipyp_profile)
+    run_combos_from_conf(conf_dict, ipyp, ipyp_profile,
+                         n_processes=n_processes)

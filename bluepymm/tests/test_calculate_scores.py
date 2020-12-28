@@ -25,18 +25,36 @@ Copyright (c) 2018, EPFL/Blue Brain Project
 import os
 import pandas
 import sqlite3
+import ipyparallel as ipp
 import json
+import subprocess
+import time
 
 from nose.plugins.attrib import attr
 import nose.tools as nt
+from nose.tools import with_setup
 
 import bluepymm.run_combos as run_combos
 from bluepymm import tools
 
+nt.assert_equal.__self__.maxDiff = None
 
 BASE_DIR = os.path.abspath(os.path.dirname(__file__))
 TEST_DIR = os.path.join(BASE_DIR, 'examples/simple1')
 TMP_DIR = os.path.join(BASE_DIR, 'tmp/')
+
+
+def setup_ipcluster():
+    """Starts the ipcluster engine."""
+    ip_proc = subprocess.Popen(["ipcluster", "start", "-n=2"])
+    # ensure that ipcluster has enough time to start
+    time.sleep(10)
+
+
+def teardown_ipcluster():
+    """Terminates the ipcluster."""
+    c = ipp.Client()
+    c.shutdown(hub=True)
 
 
 @attr('unit')
@@ -55,7 +73,9 @@ def test_run_emodel_morph_isolated():
         emodel,
         emodel_dir,
         emodel_params,
-        morph_path)
+        morph_path,
+        None,
+        False)
     ret = run_combos.calculate_scores.run_emodel_morph_isolated(input_args)
 
     expected_ret = {'exception': None,
@@ -72,7 +92,7 @@ def test_run_emodel_morph_isolated_exception():
     """
     # input parameters
     uid = 0
-    emodel = 'emodel_doesnt_exist'
+    emodel = 'Key mm.bpo_holding_current not found in responses'
     emodel_dir = os.path.join(TEST_DIR, 'data/emodels_dir/subdir/')
     emodel_params = {'cm': 1.0}
     morph_name = 'morph1'
@@ -85,7 +105,9 @@ def test_run_emodel_morph_isolated_exception():
         emodel,
         emodel_dir,
         emodel_params,
-        morph_path)
+        morph_path,
+        None,
+        True)
     ret = run_combos.calculate_scores.run_emodel_morph_isolated(input_args)
 
     # verify output: exception thrown because of non-existing e-model
@@ -114,7 +136,9 @@ def test_run_emodel_morph():
         emodel,
         emodel_dir,
         emodel_params,
-        morph_path)
+        morph_path,
+        None,
+        False)
 
     expected_scores = {'Step1.SpikeCount': 20.0}
     expected_extra_values = {'holding_current': None,
@@ -157,11 +181,12 @@ def test_create_arg_list():
     testsqlite_filename = os.path.join(TMP_DIR, 'test1.sqlite')
     index = 0
     morph_name = 'morph'
-    morph_dir = 'morph_dir'
+    morph_dir = os.path.join(TEST_DIR, 'data/morphs')
     mtype = 'mtype'
     etype = 'etype'
     layer = 'layer'
     emodel = 'emodel'
+    emodel_dir = os.path.join(TEST_DIR, 'data/emodels_dir/subdir/')
     row = {'index': index,
            'morph_name': morph_name,
            'morph_ext': None,
@@ -175,14 +200,16 @@ def test_create_arg_list():
     _write_test_scores_database(row, testsqlite_filename)
 
     # extra input parameters
-    emodel_dirs = {emodel: 'emodel_dirs'}
+    emodel_dirs = {emodel: emodel_dir}
     params = 'test'
     final_dict = {emodel: {'params': params}}
-
+    extra_values_error = False
+    # from nose.tools import set_trace; set_trace()
     ret = run_combos.calculate_scores.create_arg_list(
         testsqlite_filename,
         emodel_dirs,
-        final_dict)
+        final_dict,
+        extra_values_error)
 
     # verify output
     morph_path = os.path.join(morph_dir, '{}.asc'.format(morph_name))
@@ -190,7 +217,8 @@ def test_create_arg_list():
                      emodel,
                      os.path.abspath(emodel_dirs[emodel]),
                      params,
-                     os.path.abspath(morph_path))]
+                     os.path.abspath(morph_path),
+                     0, extra_values_error)]
     nt.assert_list_equal(ret, expected_ret)
 
 
@@ -201,11 +229,12 @@ def test_create_arg_list_exception():
     testsqlite_filename = os.path.join(TMP_DIR, 'test2.sqlite')
     index = 0
     morph_name = 'morph'
-    morph_dir = 'morph_dir'
+    morph_dir = os.path.join(TEST_DIR, 'data/morphs')
     mtype = 'mtype'
     etype = 'etype'
     layer = 'layer'
     emodel = None
+    emodel_dir = os.path.join(TEST_DIR, 'data/emodels_dir/subdir/')
     row = {'index': index,
            'morph_name': morph_name,
            'morph_ext': None,
@@ -219,7 +248,7 @@ def test_create_arg_list_exception():
     _write_test_scores_database(row, testsqlite_filename)
 
     # extra input parameters
-    emodel_dirs = {emodel: 'emodel_dirs'}
+    emodel_dirs = {emodel: emodel_dir}
     params = 'test'
     final_dict = {emodel: {'params': params}}
 
@@ -304,7 +333,7 @@ def test_expand_scores_to_score_values_table():
     expected_df = pandas.DataFrame(data=json.loads(scores), index=[0])
     with sqlite3.connect(db_path) as conn:
         score_values = pandas.read_sql('SELECT * FROM score_values', conn)
-    pandas.util.testing.assert_frame_equal(score_values, expected_df)
+    pandas.testing.assert_frame_equal(score_values, expected_df)
 
 
 @attr('unit')
@@ -327,12 +356,13 @@ def test_expand_scores_to_score_values_table_error():
 
 
 @attr('unit')
+@with_setup(setup_ipcluster, teardown_ipcluster)
 def test_calculate_scores():
     """run_combos.calculate_scores: test calculate_scores"""
     # write database
     test_db_filename = os.path.join(TMP_DIR, 'test4.sqlite')
     morph_name = 'morph1'
-    morph_dir = './data/morphs'
+    morph_dir = os.path.join(TEST_DIR, 'data/morphs')
     mtype = 'mtype1'
     etype = 'etype1'
     layer = 1
@@ -357,28 +387,48 @@ def test_calculate_scores():
     emodel_dirs = {emodel: emodel_dir}
     final_dict_path = os.path.join(emodel_dir, 'final.json')
     final_dict = tools.load_json(final_dict_path)
-    with tools.cd(TEST_DIR):
-        run_combos.calculate_scores.calculate_scores(final_dict, emodel_dirs,
-                                                     test_db_filename)
 
-    # verify database
-    scores = {'Step1.SpikeCount': 20.0}
-    extra_values = {'holding_current': None, 'threshold_current': None}
-    expected_db_row = {'index': 0,
-                       'morph_name': morph_name,
-                       'morph_ext': None,
-                       'morph_dir': morph_dir,
-                       'mtype': mtype,
-                       'etype': etype,
-                       'layer': layer,
-                       'emodel': emodel,
-                       'original_emodel': emodel,
-                       'to_run': 0,
-                       'scores': json.dumps(scores),
-                       'extra_values': json.dumps(extra_values),
-                       'exception': exception}
-    with sqlite3.connect(test_db_filename) as scores_db:
-        scores_db.row_factory = _dict_factory
-        scores_cursor = scores_db.execute('SELECT * FROM scores')
-        db_row = scores_cursor.fetchall()[0]
-        nt.assert_dict_equal(db_row, expected_db_row)
+    for use_ipyp in [False, True]:
+        with tools.cd(TEST_DIR):
+            run_combos.calculate_scores.calculate_scores(
+                final_dict,
+                emodel_dirs,
+                test_db_filename,
+                use_ipyp=use_ipyp,
+                n_processes=1
+            )
+
+        # verify database
+        scores = {'Step1.SpikeCount': 20.0}
+        extra_values = {'holding_current': None, 'threshold_current': None}
+        expected_db_row = {'index': 0,
+                           'morph_name': morph_name,
+                           'morph_ext': None,
+                           'morph_dir': morph_dir,
+                           'mtype': mtype,
+                           'etype': etype,
+                           'layer': layer,
+                           'emodel': emodel,
+                           'original_emodel': emodel,
+                           'to_run': 0,
+                           'scores': json.dumps(scores),
+                           'extra_values': json.dumps(extra_values),
+                           'exception': exception}
+        with sqlite3.connect(test_db_filename) as scores_db:
+            scores_db.row_factory = _dict_factory
+            scores_cursor = scores_db.execute('SELECT * FROM scores')
+            db_row = scores_cursor.fetchall()[0]
+            nt.assert_dict_equal(db_row, expected_db_row)
+
+
+@attr('unit')
+def test_read_apical_point():
+    """run_combos.calculate_scores: test read_apical_point"""
+
+    morph_name = 'morph'
+    morph_dir = os.path.join(TEST_DIR, 'data/morphs')
+
+    apical_point_isec = run_combos.calculate_scores.read_apical_point(
+        morph_dir, morph_name)
+
+    nt.assert_equal(apical_point_isec, 0)

@@ -239,11 +239,14 @@ def prepare_emodel_dir(input_args):
 
                 with tools.cd(emodel):
                     print('Compiling mechanisms ...')
-                    sh.nrnivmodl('mechanisms')
+                    if os.path.exists('mechanisms'):
+                        sh.nrnivmodl('mechanisms')
 
                     create_and_write_hoc_file(
                         emodel, emodel_dir, hoc_dir, emodel_dict['params'],
                         'cell_template_neurodamus.jinja2')
+
+                os.remove(tar_filename)
 
     except Exception:
         raise Exception(''.join(traceback.format_exception(*sys.exc_info())))
@@ -252,13 +255,15 @@ def prepare_emodel_dir(input_args):
 
 
 def prepare_emodel_dirs(
-        final_dict,
-        emodel_etype_map,
-        emodels_dir,
-        opt_dir,
-        emodels_hoc_dir,
-        emodels_in_repo,
-        continu=False):
+    final_dict,
+    emodel_etype_map,
+    emodels_dir,
+    opt_dir,
+    emodels_hoc_dir,
+    emodels_in_repo,
+    continu=False,
+    n_processes=None,
+):
     """Prepare the directories for the emodels.
 
     Args:
@@ -275,6 +280,8 @@ def prepare_emodel_dirs(
             into separate subdirectories.
         continu: True if this BluePyMM run builds on a previous run, False
             otherwise. Default is False.
+        n_processes: the integer number of processes. If `None`,
+        all processes are going to be used.
 
     Return:
         A dict mapping e-models to prepared e-model directories.
@@ -296,10 +303,22 @@ def prepare_emodel_dirs(
              emodels_in_repo,
              continu))
 
-    print('Parallelising preparation of e-model directories')
-    pool = multiprocessing.Pool(maxtasksperchild=1)
     emodel_dirs = {}
-    for emodel_dir_dict in pool.map(prepare_emodel_dir, arg_list, chunksize=1):
+    emodel_dir_dicts = []
+
+    if n_processes == 1:
+        for arg in arg_list:
+            emodel_dir_dict = prepare_emodel_dir(arg)
+            emodel_dir_dicts.append(emodel_dir_dict)
+    else:
+        print('Parallelising preparation of e-model directories')
+        pool = multiprocessing.Pool(processes=n_processes,
+                                    maxtasksperchild=1)
+        for emodel_dir_dict in pool.map(prepare_emodel_dir, arg_list,
+                                        chunksize=1):
+            emodel_dir_dicts.append(emodel_dir_dict)
+
+    for emodel_dir_dict in emodel_dir_dicts:
         for emodel, emodel_dir in emodel_dir_dict.items():
             emodel_dirs[emodel] = emodel_dir
 

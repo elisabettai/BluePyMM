@@ -181,12 +181,12 @@ def _apply_megating(emodel_mtype_etype_thresholds, emodel_score_values,
 def _create_extneurondb_rows(selected_combinations):
     """Prepare rows for database based on selected combinations."""
     # 1. select relevant columns from db with successful combinations
-    emodel_ext_neurondb = selected_combinations.ix[:, ('morph_name',
-                                                       'layer',
-                                                       'fullmtype',
-                                                       'etype',
-                                                       'emodel',
-                                                       'extra_values')].copy()
+    emodel_ext_neurondb = selected_combinations.loc[:, ('morph_name',
+                                                        'layer',
+                                                        'fullmtype',
+                                                        'etype',
+                                                        'emodel',
+                                                        'extra_values')].copy()
 
     # 2. create additional columns: combo_name, threshold current, and
     #    holding current
@@ -269,7 +269,8 @@ def process_emodels(emodels,
                     megate_patterns,
                     skip_repaired_exemplar,
                     enable_check_opt_scores,
-                    select_perc_best):
+                    select_perc_best,
+                    n_processes=None):
 
     arg_list = [(emodel,
                  scores,
@@ -280,13 +281,22 @@ def process_emodels(emodels,
                  enable_check_opt_scores,
                  select_perc_best) for emodel in emodels]
 
-    print('Parallelising selection processing of e-models')
-    pool = multiprocessing.Pool(maxtasksperchild=1)
     emodel_infos = {}
-    for emodel, emodel_info in pool.imap(process_emodel, arg_list,
-                                         chunksize=1):
-        print('Received processed info from e-model %s' % emodel)
-        emodel_infos[emodel] = emodel_info
+
+    if n_processes == 1:
+        for args in arg_list:
+            emodel, emodel_info = process_emodel(args)
+            emodel_infos[emodel] = emodel_info
+    else:
+        print('Parallelising selection processing of e-models')
+        pool = multiprocessing.Pool(maxtasksperchild=1, processes=n_processes)
+        for emodel, emodel_info in pool.imap(process_emodel, arg_list,
+                                             chunksize=1):
+            print('Received processed info from e-model %s' % emodel)
+            emodel_infos[emodel] = emodel_info
+
+        pool.terminate()
+        pool.join()
 
     return emodel_infos
 
