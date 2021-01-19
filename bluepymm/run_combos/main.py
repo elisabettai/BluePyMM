@@ -39,7 +39,7 @@ def add_parser(action):
                         help='Use ipyparallel')
     parser.add_argument('--ipyp_profile',
                         help='Path to ipyparallel profile')
-    parser.add_argument('--timeout',
+    parser.add_argument('--timeout', type=int, default=10,
                         help='Timeout for ipyparallel clients')
     parser.add_argument('--n_processes', help='number of processes',
                         type=int)
@@ -78,11 +78,11 @@ def run_combos_from_conf(conf_dict, ipyp=None, ipyp_profile=None, timeout=10,
         n_processes=n_processes)
 
 
-def run_combos(conf_filename, ipyp=None, ipyp_profile=None, n_processes=None):
+def run_combos(conf_filename, ipyp=None, ipyp_profile=None, n_processes=None, timeout=10):
     """Run combos"""
 
     print('Reading configuration at %s' % conf_filename)
     conf_dict = tools.load_json(conf_filename)
 
     run_combos_from_conf(conf_dict, ipyp, ipyp_profile,
-                         n_processes=n_processes)
+                         n_processes=n_processes, timeout=timeout)

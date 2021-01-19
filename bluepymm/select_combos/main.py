@@ -38,19 +38,14 @@ def select_combos(conf_filename, n_processes):
 
     select_combos_from_conf(conf_dict, n_processes)
 
-def select_combos_dep(conf_filename):
+def select_combos_dep(conf_filename, n_process):
     """Parse conf file and run select combos"""
     # Parse configuration file
     conf_dict = tools.load_json(conf_filename)
 
     select_combos_from_conf(conf_dict, dep=True)
 
-<<<<<<< HEAD
-
-def select_combos_from_conf(conf_dict, dep=False):
-=======
-def select_combos_from_conf(conf_dict, n_processes=None):
->>>>>>> upstream/master
+def select_combos_from_conf(conf_dict, dep=False, n_processes=None):
     """Compare scores of me-combinations to thresholds, select successful
     combinations, and write results out to file.
 
@@ -113,13 +108,9 @@ def select_combos_from_conf(conf_dict, n_processes=None):
             scores, score_values,
             conf_dict.get('plot_emodels_per_morphology', False),
             output_dir,
-<<<<<<< HEAD
-            select_perc_best)
-
-=======
             select_perc_best,
             n_processes=n_processes)
->>>>>>> upstream/master
+
     print('Wrote pdf to %s' % os.path.abspath(pdf_filename))
 
     # write output files
@@ -164,6 +155,7 @@ def add_parser(action):
                                help='Select feasible me-combinations')
     parser.add_argument('conf_filename')
     parser.add_argument('--n_processes', help='number of processes',
+                        type=int)
 
 
 def add_parser_dep(action):
@@ -173,4 +165,5 @@ def add_parser_dep(action):
                                help='Select feasible me-combinations, save holding/threshold currents in depolarized state')
     parser.add_argument('conf_filename')
     parser.add_argument('--n_processes', help='number of processes',
+                        type=int)
 

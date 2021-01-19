@@ -72,6 +72,7 @@ def run_emodel_morph_isolated(input_args):
         emodel_dir,
         emodel_params,
         morph_path,
+        save_traces,
         apical_point_isec,
         extra_values_error
     ) = input_args
@@ -80,27 +81,26 @@ def run_emodel_morph_isolated(input_args):
     return_dict['uid'] = uid
     return_dict['exception'] = None
 
-    pool = tools.NestedPool(1, maxtasksperchild=1)
-
-    try:
-        return_dict['scores'], return_dict['extra_values'] = pool.apply(
-            run_emodel_morph, (emodel,
+    #pool = tools.NestedPool(1, maxtasksperchild=1)
+    #try:
+    return_dict['scores'], return_dict['extra_values'] = run_emodel_morph(emodel,
                                emodel_dir,
                                emodel_params,
                                morph_path,
-                               apical_point_isec,
-                               extra_values_error
-                               ))
+                               save_traces,
+                               apical_point_isec)
+                               #extra_values_error
+                               #)
 
-    except Exception:
-        return_dict['scores'] = None
-        return_dict['extra_values'] = None
-        return_dict['exception'] = "".join(traceback.format_exception(
-                                           *sys.exc_info()))
+    #except Exception:
+    #    return_dict['scores'] = None
+    #    return_dict['extra_values'] = None
+    #    return_dict['exception'] = "".join(traceback.format_exception(
+ #                                           *sys.exc_info()))
 
-    pool.terminate()
-    pool.join()
-    del pool
+    #pool.terminate()
+    #pool.join()
+    #del pool
 
     return return_dict
 
@@ -121,14 +121,13 @@ def read_apical_point(morph_dir, morph_name):
 
 
 def run_emodel_morph(
-        uid,
         emodel,
         emodel_dir,
         emodel_params,
         morph_path,
-        save_traces=False,
+        save_traces,
         apical_point_isec,
-        extra_values_error=True):
+        extra_values_error=False):
 
     """Run e-model morphology combination.
 
@@ -147,16 +146,15 @@ def run_emodel_morph(
             - dict that maps features to scores
             - dict with extra values: 'holding_current' and 'threshold_current'
     """
-
-    try:
-        sys.stdout = open('/dev/null', 'w')
-        print('Running e-model %s on morphology %s in %s' %
+    #try:
+    #sys.stdout = open('/dev/null', 'w')
+    print('Running e-model %s on morphology %s in %s' %
               (emodel, morph_path, emodel_dir))
 
-        setup = tools.load_module('setup', emodel_dir)
+    setup = tools.load_module('setup', emodel_dir)
 
-        print("Changing path to %s" % emodel_dir)
-        with tools.cd(emodel_dir):
+    print("Changing path to %s" % emodel_dir)
+    with tools.cd(emodel_dir):
             if hasattr(setup, 'multieval'):
 
                 prefix = 'mm'
@@ -197,13 +195,14 @@ def run_emodel_morph(
                 responses = evaluator.run_protocols(
                     evaluator.fitness_protocols.values(),
                     emodel_params)
+
                 scores = evaluator.fitness_calculator.calculate_scores(
                     responses)
 
                 extra_values = {}
 
                 prefix = ''
-                # All thalamic e-models have hyp hold/thresh currents
+                # Some thalamic e-models have hyp hold/thresh currents
                 for response_key, extra_values_key in [
                    ('%s.bpo_holding_current_hyp' % prefix,
                          'holding_current'),
@@ -241,8 +240,8 @@ def run_emodel_morph(
                         'exp_mean': feature.exp_mean,
                         'exp_std': feature.exp_std
                     }
-                traces_fn = 'traces_{}_{}_{}.json'.format(
-                    uid, emodel, os.path.basename(morph_path))
+                traces_fn = 'traces_{}_{}.json'.format(
+                    emodel, os.path.basename(morph_path))
                 traces_path = os.path.join(
                     emodel_dir,
                     '..',
@@ -265,8 +264,8 @@ def run_emodel_morph(
                         cls=TimeVoltageResponseEncoder)
 
             
-                features_fn = 'features_{}_{}_{}.json'.format(
-                    uid, emodel, os.path.basename(morph_path))
+                features_fn = 'features_{}_{}.json'.format(
+                    emodel, os.path.basename(morph_path))
                 features_path = os.path.join(
                     emodel_dir,
                     '..',
@@ -287,15 +286,15 @@ def run_emodel_morph(
                         indent=2,
                         sort_keys=True)
                 
-        return scores, extra_values
+    return scores, extra_values
 
-    except Exception:
-        # Make sure exception and backtrace are thrown back to parent process
-        raise Exception(
-            "".join(traceback.format_exception(*sys.exc_info())))
+    #except Exception:
+    #    # Make sure exception and backtrace are thrown back to parent process
+    #    raise Exception(
+    #        "".join(traceback.format_exception(*sys.exc_info())))
 
 
-def create_arg_list(scores_db_filename, emodel_dirs, final_dict, save_trace = False,
+def create_arg_list(scores_db_filename, emodel_dirs, final_dict, save_traces = False,
                     extra_values_error=False, use_apical_points=True):
 
     """Create list of argument tuples to be used as an input for
@@ -355,9 +354,8 @@ def create_arg_list(scores_db_filename, emodel_dirs, final_dict, save_trace = Fa
                 args = (index, emodel,
                         os.path.abspath(emodel_dirs[emodel]),
                         final_dict[original_emodel]['params'],
-                        morph_path, save_trace, apical_point_isec, extra_values_error)
+                        morph_path, save_traces, apical_point_isec, extra_values_error)
                 arg_list.append(args)
-
     print('Found %d rows in score database to run' % len(arg_list))
 
     return arg_list
@@ -425,7 +423,7 @@ def expand_scores_to_score_values_table(scores_sqlite_filename):
 
 
 def calculate_scores(final_dict, emodel_dirs, scores_db_filename,
-                     use_ipyp=False, ipyp_profile=None, save_traces=False, timeout=10
+                     use_ipyp=False, ipyp_profile=None, save_traces=False, timeout=10,
                      use_apical_points=True, n_processes=None):
 
     """Calculate scores of e-model morphology combinations and update the
@@ -447,11 +445,11 @@ def calculate_scores(final_dict, emodel_dirs, scores_db_filename,
         all processes are going to be used.
     """
 
-    print('Creating argument list for parallelisation')
+    print(f'Creating argument list for parallelisation with timeout {timeout}')
     arg_list = create_arg_list(scores_db_filename,
                                emodel_dirs,
                                final_dict,
-                               save_traces,
+                               save_traces=save_traces,
                                use_apical_points=use_apical_points)
 
     print('Parallelising score evaluation of %d me-combos' % len(arg_list))
@@ -463,8 +461,9 @@ def calculate_scores(final_dict, emodel_dirs, scores_db_filename,
                              arg_list, ordered=False)
     else:
         # use multiprocessing
-        pool = tools.NestedPool(processes=n_processes)
-        results = pool.imap_unordered(run_emodel_morph_isolated, arg_list)
+        #pool = tools.NestedPool(processes=n_processes)
+        #results = pool.imap_unordered(run_emodel_morph_isolated, arg_list)
+        results = map(run_emodel_morph_isolated, arg_list) #FIXME, only used for debugging
 
     # keep track of the number of received results
     uids_received = 0
